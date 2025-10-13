@@ -20,8 +20,8 @@ Both modes:
 - [Installation](#installation)
 - [Project layout](#project-layout)
 - [Command-line usage](#command-line-usage)
-  - [poly mode example — octagons](#poly-mode-example--octagons)
-  - [grid mode example — 3×3 DNA-origami](#grid-mode-example --3x3-dna-origami)
+  - [poly mode example — octagons](#poly-mode-example)
+  - [grid mode example — 3×3 DNA-origami](#grid-mode-example)
 - [Python API quickstart](#python-api-quickstart)
 - [Output data model (HDF5 schema)](#output-data-model-hdf5-schema)
 - [Parameters and behavior](#parameters-and-behavior)
@@ -137,7 +137,7 @@ grid
 
 ---
 
-### poly mode example — **octagons**
+### poly mode example
 
 Simulate octagonal monomers (8-gons), monomer-only (no multi-mers), modest noise, and write an HDF5 plus a quick 2D plot.
 
@@ -174,7 +174,7 @@ python -m simflux.simflux \
 
 ---
 
-### grid mode example — **3×3 DNA-origami**
+### grid mode example
 
 Simulate 3 rows × 3 cols lattice, node separation 10 units, moderate noise.
 
