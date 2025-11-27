@@ -602,7 +602,7 @@ def _sample_cluster_centres_with_exclusion(xrange, yrange, n_clusters, forbidden
 def gen_clutter(xrange, yrange, n_clusters, measured, ms_uncertainty,
                 forbidden_centres=None, forbidden_radius=0.0):
     """
-    Generate clutter measurement clusters (not tied to emitters).
+    Generate clutter measurement clusters with explicit per-cluster emitter IDs (int < 0).
 
     :param xrange: Bounds for cluster centres ``(xmin, xmax)``.
     :type xrange: Tuple[float, float]
@@ -618,7 +618,8 @@ def gen_clutter(xrange, yrange, n_clusters, measured, ms_uncertainty,
     :type forbidden_centres: array_like or None
     :param forbidden_radius: Exclusion radius around ``forbidden_centres``.
     :type forbidden_radius: float
-    :returns: Array ``(K,3)`` with columns ``[x, y, emitter_id=-1]``.
+    :returns: Array ``(K,3)`` with columns ``[x, y, emitter_id]`` where
+        ``emitter_id`` is a unique negative integer per clutter cluster.
     :rtype: np.ndarray
     """
     if n_clusters <= 0:
@@ -636,10 +637,15 @@ def gen_clutter(xrange, yrange, n_clusters, measured, ms_uncertainty,
     )
 
     out: List[Tuple[float, float, int]] = []
-    for c in centres:
+    if centres.size == 0:
+        return np.empty((0, 3))
+
+    for j, c in enumerate(centres):
+        emitter_id = -(j + 1)  # unique negative ID per clutter emitter
         meas = generate_measurements(c, poisson_mean=measured, uncertainty_std=ms_uncertainty)
         for m in meas:
-            out.append((float(m[0]), float(m[1]), -1))
+            out.append((float(m[0]), float(m[1]), emitter_id))
+
     return np.asarray(out).reshape(-1, 3)
 
 
