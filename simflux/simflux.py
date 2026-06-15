@@ -623,7 +623,7 @@ def gen_clutter(xrange, yrange, n_clusters, measured, ms_uncertainty,
     :rtype: np.ndarray
     """
     if n_clusters <= 0:
-        return np.empty((0, 3))
+        return np.empty((0, 3)), np.empty((0, 3))
 
     # Canonicalise the forbidden set; use empty array if none supplied.
     if forbidden_centres is None:
@@ -637,16 +637,21 @@ def gen_clutter(xrange, yrange, n_clusters, measured, ms_uncertainty,
     )
 
     out: List[Tuple[float, float, int]] = []
+    flu: List[Tuple[float, float, int]] = []
     if centres.size == 0:
-        return np.empty((0, 3))
+        return np.empty((0, 3)), np.empty((0, 3))
 
     for j, c in enumerate(centres):
         emitter_id = -(j + 1)  # unique negative ID per clutter emitter
+        # the cluster centre is the generating (clutter) fluorophore for this cluster
+        flu.append((float(c[0]), float(c[1]), emitter_id))
         meas = generate_measurements(c, poisson_mean=measured, uncertainty_std=ms_uncertainty)
         for m in meas:
             out.append((float(m[0]), float(m[1]), emitter_id))
 
-    return np.asarray(out).reshape(-1, 3)
+    meas_arr = np.asarray(out).reshape(-1, 3) if out else np.empty((0, 3))
+    flu_arr = np.asarray(flu).reshape(-1, 3) if flu else np.empty((0, 3))
+    return meas_arr, flu_arr
 
 
 def apply_membrane(xy: np.ndarray, membrane_function: Optional[Callable]) -> np.ndarray:
@@ -888,6 +893,7 @@ def simulate_poly(
 
     # Optional clutter: number of clusters scales with the count of labelled emitters.
     clutter_data: List[Tuple[float, float, int]] = []
+    clutter_flu = np.empty((0, 3))
     if clutter_fraction is not None and clutter_fraction >= 0:
         n_labelled = sum(1 for e in emitter_rows if e[4] == "labelled")
         n_clusters = int(np.floor(clutter_fraction * n_labelled))
@@ -895,7 +901,7 @@ def simulate_poly(
             emitter_xy = np.array([[e[0], e[1]] for e in emitter_rows])
             xmin, ymin = emitter_xy.min(axis=0) if len(emitter_xy) else (0.0, 0.0)
             xmax, ymax = emitter_xy.max(axis=0) if len(emitter_xy) else (0.0, 0.0)
-            clutter_data = gen_clutter(
+            clutter_data, clutter_flu = gen_clutter(
                 (xmin, xmax), (ymin, ymax), n_clusters,
                 measured=measured, ms_uncertainty=ms_uncertainty,
                 forbidden_centres=cen_tbl["position"],
@@ -908,6 +914,9 @@ def simulate_poly(
                    if len(observed_data) else np.empty((0, 2)))
     clutter_xy = (np.array([[c[0], c[1]] for c in clutter_data], dtype=float)
                   if len(clutter_data) else np.empty((0, 2)))
+    clutter_flu_xy = clutter_flu[:, :2] if len(clutter_flu) else np.empty((0, 2))
+    clutter_flu_id = (clutter_flu[:, 2].astype(np.int32) if len(clutter_flu)
+                      else np.empty((0,), dtype=np.int32))
 
     data = {
         "centroid": {k: cen_tbl[k] for k in ("position", "id", "group_id", "group_index", "group_size", "sides", "theta")},
@@ -930,6 +939,8 @@ def simulate_poly(
                            if len(clutter_data) else np.empty((0,), dtype=np.int32)),
             "type": (np.array(["clutter"] * len(clutter_xy), dtype=str)
                      if len(clutter_data) else np.empty((0,), dtype=str)),
+            "fluorophore": clutter_flu_xy,
+            "fluorophore_id": clutter_flu_id,
         },
         "edges": np.array(edges, dtype=np.int32) if len(edges) else np.empty((0, 2), dtype=np.int32),
     }
@@ -970,11 +981,16 @@ def simulate_poly(
                 ogrp.create_dataset("emitter_id", data=data["observed"]["emitter_id"])
                 ogrp.create_dataset("centroid_id", data=data["observed"]["centroid_id"])
 
-            if len(clutter_xy):
+            if len(clutter_xy) or len(clutter_flu_xy):
                 cgrp = hf.create_group("clutter")
-                cgrp.create_dataset("position", data=clutter_pos)
+                cgrp.create_dataset("position", data=(clutter_pos if len(clutter_xy)
+                                                      else np.empty((0, 3))))
                 cgrp.create_dataset("emitter_id", data=data["clutter"]["emitter_id"])
                 cgrp.create_dataset("type", data=np.array(["clutter"] * len(clutter_xy), dtype="S"))
+                # generating clutter fluorophores (one per cluster), mirroring the emitter group
+                cgrp.create_dataset("fluorophore",
+                                    data=apply_membrane(clutter_flu_xy, membrane_function))
+                cgrp.create_dataset("fluorophore_id", data=clutter_flu_id)
 
     return data
 
@@ -1104,7 +1120,7 @@ def simulate_grid(
             emitter_xy = np.array([[e[0], e[1]] for e in emitter_rows])
             xmin, ymin = emitter_xy.min(axis=0) if len(emitter_xy) else (0.0, 0.0)
             xmax, ymax = emitter_xy.max(axis=0) if len(emitter_xy) else (0.0, 0.0)
-            clutter_data = gen_clutter(
+            clutter_data, _clutter_flu = gen_clutter(
                 (xmin, xmax), (ymin, ymax), n_clusters,
                 measured=measured, ms_uncertainty=ms_uncertainty,
                 forbidden_centres=cen_tbl["position"],
